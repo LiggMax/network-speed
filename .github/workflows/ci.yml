@@ -48,6 +48,7 @@ jobs:
           grep -Eq '^Depends: firmware \(>= 15\.0\)$' control
           grep -q '%hook SpringBoard' Tweak.xm
           grep -q '%hook STUIStatusBarForegroundView' Tweak.xm
+          grep -q '%hook STUIStatusBarDisplayableContainerView' Tweak.xm
           grep -q '%hook UIStatusBarForegroundView' Tweak.xm
           grep -q '%hook _UIStatusBarForegroundView' Tweak.xm
           grep -q 'getifaddrs' Tweak.xm

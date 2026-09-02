@@ -45,14 +45,43 @@ static NSString *NetSpeedFormat(double bytesPerSecond) {
 	return [NSString stringWithFormat:@"%.0fB/s", bytesPerSecond];
 }
 
+static UIView *NetSpeedFindDisplayableContainer(UIView *root) {
+	for (NSString *className in @[@"STUIStatusBarDisplayableContainerView", @"UIStatusBarDisplayableContainerView", @"_UIStatusBarDisplayableContainerView"]) {
+		Class containerClass = NSClassFromString(className);
+		if (containerClass != Nil && [root isKindOfClass:containerClass]) return root;
+	}
+	for (UIView *subview in root.subviews) {
+		UIView *result = NetSpeedFindDisplayableContainer(subview);
+		if (result != nil) return result;
+	}
+	return nil;
+}
+
 static void NetSpeedLayoutLabel(UIView *container, UILabel *label) {
 	CGRect bounds = container.bounds;
 	CGFloat width = MIN(190.0, MAX(150.0, bounds.size.width * 0.18));
 	CGFloat height = MIN(20.0, MAX(17.0, bounds.size.height - 2.0));
-	label.frame = CGRectMake(MAX(4.0, bounds.size.width - width - 8.0), (bounds.size.height - height) / 2.0, width, height);
+	CGFloat occupiedRight = bounds.size.width;
+	UIView *rightmostItem = nil;
+	for (UIView *subview in container.subviews) {
+		if (subview == label || subview.hidden) continue;
+		CGRect frame = subview.frame;
+		BOOL isSmallStatusBarItem = frame.size.width > 0.0 && frame.size.width < bounds.size.width * 0.5 && CGRectGetMaxX(frame) > bounds.size.width * 0.55;
+		if (isSmallStatusBarItem && frame.origin.x < occupiedRight) {
+			occupiedRight = frame.origin.x;
+			rightmostItem = subview;
+		}
+	}
+	// Keep clear of the native Wi-Fi, battery and other right-side items.
+	CGFloat x = MAX(4.0, occupiedRight - width - 8.0);
+	label.frame = CGRectMake(x, (bounds.size.height - height) / 2.0, width, height);
+	if (rightmostItem != nil) [container insertSubview:label belowSubview:rightmostItem];
+	else [container addSubview:label];
 }
 
-static void NetSpeedAttachLabel(UIView *container) {
+static void NetSpeedAttachLabel(UIView *statusBar) {
+	UIView *container = NetSpeedFindDisplayableContainer(statusBar);
+	if (container == nil) container = statusBar;
 	if (container == nil || container.bounds.size.width <= 0.0 || container.bounds.size.height <= 0.0) return;
 	UILabel *label = (UILabel *)[container viewWithTag:0x4E535053];
 	if (label == nil) {
@@ -67,10 +96,8 @@ static void NetSpeedAttachLabel(UIView *container) {
 		label.hidden = YES;
 		label.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin |
 			UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
-		[container addSubview:label];
 	}
 	gNetSpeedLabel = label;
-	[container bringSubviewToFront:label];
 	NetSpeedLayoutLabel(container, label);
 }
 
@@ -109,6 +136,9 @@ static void NetSpeedStartSampling(void) {
 @interface STUIStatusBarForegroundView : UIView
 @end
 
+@interface STUIStatusBarDisplayableContainerView : UIView
+@end
+
 @interface UIStatusBarForegroundView : UIView
 @end
 
@@ -118,6 +148,19 @@ static void NetSpeedStartSampling(void) {
 %group NetSpeedSTUIStatusBar
 
 %hook STUIStatusBarForegroundView
+
+- (void)layoutSubviews {
+	%orig;
+	NetSpeedAttachLabel(self);
+}
+
+%end
+
+%end
+
+%group NetSpeedSTUIDisplayableContainer
+
+%hook STUIStatusBarDisplayableContainerView
 
 - (void)layoutSubviews {
 	%orig;
@@ -170,6 +213,7 @@ static void NetSpeedStartSampling(void) {
 %ctor {
 	%init(NetSpeedCore);
 	if (NSClassFromString(@"STUIStatusBarForegroundView") != Nil) %init(NetSpeedSTUIStatusBar);
+	if (NSClassFromString(@"STUIStatusBarDisplayableContainerView") != Nil) %init(NetSpeedSTUIDisplayableContainer);
 	if (NSClassFromString(@"UIStatusBarForegroundView") != Nil) %init(NetSpeedUIStatusBar);
 	if (NSClassFromString(@"_UIStatusBarForegroundView") != Nil) %init(NetSpeedUnderscoreStatusBar);
 }
