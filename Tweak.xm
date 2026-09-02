@@ -14,6 +14,7 @@ static BOOL gDidLogRuntime;
 static BOOL gDidLogAttach;
 static BOOL gDidLogMissingForeground;
 static BOOL gDidLogHierarchy;
+static BOOL gDidLogStatusBarClasses;
 static __weak UILabel *gNetSpeedLabel;
 static dispatch_source_t gSampleTimer;
 static dispatch_queue_t gSampleQueue;
@@ -170,6 +171,21 @@ static void NetSpeedLogRuntimeState(void) {
 	if (gDidLogRuntime) return;
 	gDidLogRuntime = YES;
 	NetSpeedLog(@"runtime: pid=%d UIStatusBar_Modern=%@ UIStatusBarWindow=%@ _UIStatusBar=%@ UIStatusBar_Base=%@ _UIStatusBarForegroundView=%@", getpid(), NSClassFromString(@"UIStatusBar_Modern") ? @"YES" : @"NO", NSClassFromString(@"UIStatusBarWindow") ? @"YES" : @"NO", NSClassFromString(@"_UIStatusBar") ? @"YES" : @"NO", NSClassFromString(@"UIStatusBar_Base") ? @"YES" : @"NO", NSClassFromString(@"_UIStatusBarForegroundView") ? @"YES" : @"NO");
+	if (!gDidLogStatusBarClasses) {
+		gDidLogStatusBarClasses = YES;
+		int classCount = objc_getClassList(NULL, 0);
+		Class *classes = classCount > 0 ? (__unsafe_unretained Class *)calloc((size_t)classCount, sizeof(Class)) : NULL;
+		if (classes != NULL) {
+			objc_getClassList(classes, classCount);
+			for (int index = 0; index < classCount; index++) {
+				NSString *name = NSStringFromClass(classes[index]);
+				if ([name rangeOfString:@"StatusBar" options:NSCaseInsensitiveSearch].location != NSNotFound) {
+					NetSpeedLog(@"runtime class: %@", name);
+				}
+			}
+			free(classes);
+		}
+	}
 	// SpringBoard on iPadOS 18 can keep its system windows outside the scene
 	// collection, so use KVC for UIApplication's private window list here.
 	id windows = [UIApplication.sharedApplication valueForKey:@"windows"];
