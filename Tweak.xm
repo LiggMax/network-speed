@@ -108,10 +108,13 @@ static void NetSpeedStartSampling(void) {
 		NSString *text = [NSString stringWithFormat:@"↓ %@  ↑ %@", NetSpeedFormat(gSmoothedDownload), NetSpeedFormat(gSmoothedUpload)];
 		dispatch_async(dispatch_get_main_queue(), ^{
 			Class statusBarClass = NSClassFromString(@"UIStatusBar_Modern");
-			for (UIWindow *window in UIApplication.sharedApplication.windows) {
-				if (statusBarClass != Nil && [window isKindOfClass:statusBarClass]) {
-					UILabel *label = (UILabel *)[window viewWithTag:kNetSpeedLabelTag];
-					if (label != nil) label.text = text;
+			for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+				if (![scene isKindOfClass:UIWindowScene.class]) continue;
+				for (UIWindow *window in ((UIWindowScene *)scene).windows) {
+					if (statusBarClass != Nil && [window isKindOfClass:statusBarClass]) {
+						UILabel *label = (UILabel *)[window viewWithTag:kNetSpeedLabelTag];
+						if (label != nil) label.text = text;
+					}
 				}
 			}
 		});
