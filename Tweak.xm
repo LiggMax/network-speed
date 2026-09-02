@@ -260,10 +260,12 @@ static void NetSpeedStartSampling(void) {
 - (void)layoutSubviews {
 	%orig;
 	NetSpeedLogRuntimeState();
+	NetSpeedLogStatusBarHierarchy(self);
 	NetSpeedAttachToStatusBar(self);
 	// iPadOS creates the status-bar content asynchronously after the window
 	// itself has laid out, so retry once after the current layout transaction.
 	dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+		NetSpeedLogStatusBarHierarchy(self);
 		NetSpeedAttachToStatusBar(self);
 	});
 }
