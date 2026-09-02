@@ -6,12 +6,14 @@
 #import <math.h>
 #import <stdarg.h>
 #import <unistd.h>
+#import <objc/runtime.h>
 
 static const NSInteger kNetSpeedLabelTag = 0x4E535053;
 static NSObject *gLogLock;
 static BOOL gDidLogRuntime;
 static BOOL gDidLogAttach;
 static BOOL gDidLogMissingForeground;
+static BOOL gDidLogHierarchy;
 static __weak UILabel *gNetSpeedLabel;
 static dispatch_source_t gSampleTimer;
 static dispatch_queue_t gSampleQueue;
@@ -79,6 +81,46 @@ static UIView *NetSpeedFindForegroundView(UIView *root) {
 		if (result != nil) return result;
 	}
 	return nil;
+}
+
+static void NetSpeedLogViewTree(UIView *view, NSUInteger depth) {
+	if (view == nil || depth > 3) return;
+	NetSpeedLog(@"tree[%lu]: %@ frame=%@ bounds=%@ subviews=%lu", (unsigned long)depth, NSStringFromClass(view.class), NSStringFromCGRect(view.frame), NSStringFromCGRect(view.bounds), (unsigned long)view.subviews.count);
+	for (UIView *subview in view.subviews) NetSpeedLogViewTree(subview, depth + 1);
+}
+
+static void NetSpeedLogObjectIvars(id object) {
+	if (object == nil) return;
+	for (Class cls = object_getClass(object); cls != Nil && cls != [NSObject class]; cls = class_getSuperclass(cls)) {
+		unsigned int count = 0;
+		Ivar *ivars = class_copyIvarList(cls, &count);
+		for (unsigned int index = 0; index < count; index++) {
+			Ivar ivar = ivars[index];
+			const char *type = ivar_getTypeEncoding(ivar);
+			const char *name = ivar_getName(ivar);
+			if (type != NULL && type[0] == '@') {
+				id value = object_getIvar(object, ivar);
+				NetSpeedLog(@"ivar: %@ %s=%@", NSStringFromClass(cls), name, value ? NSStringFromClass([value class]) : @"nil");
+			} else {
+				NetSpeedLog(@"ivar: %@ %s type=%s", NSStringFromClass(cls), name, type ?: "?");
+			}
+		}
+		free(ivars);
+	}
+}
+
+static void NetSpeedLogStatusBarHierarchy(UIView *statusBar) {
+	if (gDidLogHierarchy || statusBar == nil) return;
+	gDidLogHierarchy = YES;
+	NetSpeedLog(@"hierarchy begin: object=%@ frame=%@ bounds=%@", NSStringFromClass(statusBar.class), NSStringFromCGRect(statusBar.frame), NSStringFromCGRect(statusBar.bounds));
+	NetSpeedLogObjectIvars(statusBar);
+	NetSpeedLogViewTree(statusBar, 0);
+	UIResponder *responder = statusBar.nextResponder;
+	for (NSUInteger index = 0; responder != nil && index < 8; index++) {
+		NetSpeedLog(@"responder[%lu]: %@", (unsigned long)index, NSStringFromClass(responder.class));
+		responder = responder.nextResponder;
+	}
+	NetSpeedLog(@"hierarchy end");
 }
 
 static void NetSpeedLayoutLabel(UIView *container, UILabel *label) {
@@ -190,6 +232,7 @@ static void NetSpeedStartSampling(void) {
 - (void)layoutSubviews {
 	%orig;
 	NetSpeedLogRuntimeState();
+	NetSpeedLogStatusBarHierarchy(self);
 	NetSpeedAttachToStatusBar(self);
 }
 
@@ -206,6 +249,7 @@ static void NetSpeedStartSampling(void) {
 - (void)layoutSubviews {
 	%orig;
 	NetSpeedLogRuntimeState();
+	NetSpeedLogStatusBarHierarchy(self);
 	NetSpeedAttachToStatusBar(self);
 }
 
