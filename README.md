@@ -1,6 +1,10 @@
 # NetSpeedStatus
 
-一个面向 Dopamine rootless（iOS 15+）的 Theos tweak，在 SpringBoard 状态栏区域显示 Wi‑Fi 和蜂窝网络的实时上下行速度。
+一个面向 Dopamine rootless 的 Theos tweak，在 SpringBoard 原生状态栏层级中显示 Wi‑Fi 和蜂窝网络的实时上下行速度。
+
+当前实现针对 iPadOS 18，Hook `UIStatusBar_Modern` 的布局，并将速度标签插入 `_UIStatusBarForegroundView`；不创建独立悬浮窗口。
+
+由于使用 iOS 私有状态栏类，其他 iOS/iPadOS 版本需要单独验证。
 
 ## 构建
 
