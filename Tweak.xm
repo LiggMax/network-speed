@@ -75,8 +75,10 @@ static NSString *NetSpeedFormat(double bytesPerSecond) {
 }
 
 static UIView *NetSpeedFindForegroundView(UIView *root) {
-	Class foregroundClass = NSClassFromString(@"_UIStatusBarForegroundView");
-	if (foregroundClass != Nil && [root isKindOfClass:foregroundClass]) return root;
+	for (NSString *className in @[@"STUIStatusBarForegroundView", @"UIStatusBarForegroundView", @"_UIStatusBarForegroundView"]) {
+		Class foregroundClass = NSClassFromString(className);
+		if (foregroundClass != Nil && [root isKindOfClass:foregroundClass]) return root;
+	}
 	for (UIView *subview in [root.subviews reverseObjectEnumerator]) {
 		UIView *result = NetSpeedFindForegroundView(subview);
 		if (result != nil) return result;
@@ -170,7 +172,7 @@ static void NetSpeedAttachToStatusBar(UIView *statusBar) {
 static void NetSpeedLogRuntimeState(void) {
 	if (gDidLogRuntime) return;
 	gDidLogRuntime = YES;
-	NetSpeedLog(@"runtime: pid=%d UIStatusBar_Modern=%@ UIStatusBarWindow=%@ _UIStatusBar=%@ UIStatusBar_Base=%@ _UIStatusBarForegroundView=%@", getpid(), NSClassFromString(@"UIStatusBar_Modern") ? @"YES" : @"NO", NSClassFromString(@"UIStatusBarWindow") ? @"YES" : @"NO", NSClassFromString(@"_UIStatusBar") ? @"YES" : @"NO", NSClassFromString(@"UIStatusBar_Base") ? @"YES" : @"NO", NSClassFromString(@"_UIStatusBarForegroundView") ? @"YES" : @"NO");
+	NetSpeedLog(@"runtime: pid=%d STUIStatusBar=%@ STUIStatusBarForegroundView=%@ UIStatusBar_Modern=%@ UIStatusBarWindow=%@ _UIStatusBar=%@ _UIStatusBarForegroundView=%@", getpid(), NSClassFromString(@"STUIStatusBar") ? @"YES" : @"NO", NSClassFromString(@"STUIStatusBarForegroundView") ? @"YES" : @"NO", NSClassFromString(@"UIStatusBar_Modern") ? @"YES" : @"NO", NSClassFromString(@"UIStatusBarWindow") ? @"YES" : @"NO", NSClassFromString(@"_UIStatusBar") ? @"YES" : @"NO", NSClassFromString(@"_UIStatusBarForegroundView") ? @"YES" : @"NO");
 	if (!gDidLogStatusBarClasses) {
 		gDidLogStatusBarClasses = YES;
 		int classCount = objc_getClassList(NULL, 0);
@@ -233,6 +235,9 @@ static void NetSpeedStartSampling(void) {
 @interface _UIStatusBarForegroundView : UIView
 @end
 
+@interface STUIStatusBarForegroundView : UIView
+@end
+
 @interface _UIStatusBar : UIView
 @end
 
@@ -288,6 +293,15 @@ static void NetSpeedStartSampling(void) {
 %end
 
 %hook _UIStatusBarForegroundView
+
+- (void)layoutSubviews {
+	%orig;
+	NetSpeedAttachToStatusBar(self);
+}
+
+%end
+
+%hook STUIStatusBarForegroundView
 
 - (void)layoutSubviews {
 	%orig;
