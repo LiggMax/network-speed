@@ -5,7 +5,7 @@
 #import <dispatch/dispatch.h>
 #import <math.h>
 
-static __weak UILabel *gNetSpeedLabel;
+static NSHashTable<UILabel *> *gNetSpeedLabels;
 static dispatch_source_t gSampleTimer;
 static uint64_t gPreviousReceived, gPreviousSent, gPreviousTimestamp;
 static double gSmoothedDownload, gSmoothedUpload;
@@ -97,6 +97,7 @@ static void NetSpeedAttachLabel(UIView *statusBar) {
 	UIView *container = NetSpeedFindRightmostDisplayableContainer(statusBar, statusBar);
 	if (container == nil) container = statusBar;
 	if (container == nil || container.bounds.size.width <= 0.0 || container.bounds.size.height <= 0.0) return;
+	if (gNetSpeedLabels == nil) gNetSpeedLabels = [NSHashTable weakObjectsHashTable];
 	UILabel *label = (UILabel *)[container viewWithTag:0x4E535053];
 	if (label == nil) {
 		label = [[UILabel alloc] initWithFrame:CGRectZero];
@@ -111,7 +112,7 @@ static void NetSpeedAttachLabel(UIView *statusBar) {
 		label.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin |
 			UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
 	}
-	gNetSpeedLabel = label;
+	[gNetSpeedLabels addObject:label];
 	NetSpeedLayoutLabel(container, label);
 }
 
@@ -140,8 +141,10 @@ static void NetSpeedStartSampling(void) {
 		if (currentUpload > 0.0) [parts addObject:[NSString stringWithFormat:@"↑ %@", NetSpeedFormat(gSmoothedUpload)]];
 		NSString *text = [parts componentsJoinedByString:@"  "];
 		dispatch_async(dispatch_get_main_queue(), ^{
-			gNetSpeedLabel.hidden = parts.count == 0;
-			if (parts.count > 0) gNetSpeedLabel.text = text;
+			for (UILabel *label in gNetSpeedLabels.allObjects) {
+				label.hidden = parts.count == 0;
+				if (parts.count > 0) label.text = text;
+			}
 		});
 	});
 	dispatch_resume(gSampleTimer);
