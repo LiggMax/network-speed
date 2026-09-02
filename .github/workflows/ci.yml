@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-check:
+    name: Static checks
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate required project files
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f Makefile
+          test -f NetSpeedStatus.plist
+          test -f control
+          test -f Tweak.xm
+
+      - name: Validate workflow YAML
+        shell: bash
+        run: |
+          set -euo pipefail
+          ruby -e 'require "yaml"; YAML.load_file(".github/workflows/ci.yml", aliases: true)' 
+
+      - name: Validate package metadata syntax
+        run: plutil -lint NetSpeedStatus.plist
+
+      - name: Validate tweak configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Eq '^ARCHS = arm64 arm64e$' Makefile
+          grep -Eq '^TARGET = iphone:clang:latest:15\.0$' Makefile
+          grep -Eq '^THEOS_PACKAGE_SCHEME = rootless$' Makefile
+          grep -Eq '^TWEAK_NAME = NetSpeedStatus$' Makefile
+          grep -q 'com.apple.springboard' NetSpeedStatus.plist
+          grep -Eq '^Package: com\.example\.netspeedstatus$' control
+          grep -Eq '^Architecture: iphoneos-arm64$' control
+          grep -Eq '^Depends: firmware \(>= 15\.0\)$' control
+          grep -q '%hook SpringBoard' Tweak.xm
+          grep -q 'getifaddrs' Tweak.xm
+          grep -q 'THEOS_PACKAGE_SCHEME=rootless' README.md
+
+  build-deb:
+    name: Build rootless deb
+    runs-on: macos-latest
+    needs: static-check
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Theos and iOS SDK
+        uses: waruhachi/theos-action@v2.4.6
+        with:
+          theos-src: waruhachi/theos
+          theos-branch: main
+          sdks-src: waruhachi/sdks
+          sdks-branch: main
+          libgcuniversal: "true"
+          libgcuniversal-src: waruhachi/LibGcUniversal
+          libgcuniversal-branch: main
+
+      - name: Build package
+        run: make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
+
+      - name: Verify package output
+        shell: bash
+        run: |
+          set -euo pipefail
+          packages=(packages/*.deb)
+          test -e "${packages[0]}"
+          file "${packages[0]}" | grep -qi 'debian binary package\|current ar archive'
+          ar -t "${packages[0]}" | grep -Eq 'debian-binary|control.tar|data.tar'
+
+      - name: Upload deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NetSpeedStatus-rootless-deb
+          path: packages/*.deb
+          if-no-files-found: error

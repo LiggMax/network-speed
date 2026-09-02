@@ -1,0 +1,9 @@
+Package: com.example.netspeedstatus
+Name: NetSpeedStatus
+Version: 1.0.0
+Architecture: iphoneos-arm64
+Description: Display real-time upload and download speed in the status bar.
+Maintainer: NetSpeedStatus
+Author: NetSpeedStatus
+Section: Tweaks
+Depends: firmware (>= 15.0)
