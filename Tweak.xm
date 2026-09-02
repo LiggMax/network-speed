@@ -154,6 +154,8 @@ static void NetSpeedStartSampling(void) {
 
 %end
 
+%group NetSpeedCore
+
 %hook SpringBoard
 
 - (void)applicationDidFinishLaunching:(UIApplication *)application {
@@ -163,7 +165,10 @@ static void NetSpeedStartSampling(void) {
 
 %end
 
+%end
+
 %ctor {
+	%init(NetSpeedCore);
 	if (NSClassFromString(@"STUIStatusBarForegroundView") != Nil) %init(NetSpeedSTUIStatusBar);
 	if (NSClassFromString(@"UIStatusBarForegroundView") != Nil) %init(NetSpeedUIStatusBar);
 	if (NSClassFromString(@"_UIStatusBarForegroundView") != Nil) %init(NetSpeedUnderscoreStatusBar);
