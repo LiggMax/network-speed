@@ -6,6 +6,7 @@
 #import <math.h>
 
 static const NSInteger kNetSpeedLabelTag = 0x4E535053;
+static __weak UILabel *gNetSpeedLabel;
 static dispatch_source_t gSampleTimer;
 static dispatch_queue_t gSampleQueue;
 static uint64_t gPreviousReceived, gPreviousSent, gPreviousTimestamp;
@@ -83,6 +84,7 @@ static void NetSpeedAttachToStatusBar(UIView *statusBar) {
 			UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
 		[container addSubview:label];
 	}
+	gNetSpeedLabel = label;
 	[container bringSubviewToFront:label];
 	NetSpeedLayoutLabel(container, label);
 }
@@ -107,16 +109,7 @@ static void NetSpeedStartSampling(void) {
 		gPreviousTimestamp = now;
 		NSString *text = [NSString stringWithFormat:@"↓ %@  ↑ %@", NetSpeedFormat(gSmoothedDownload), NetSpeedFormat(gSmoothedUpload)];
 		dispatch_async(dispatch_get_main_queue(), ^{
-			Class statusBarClass = NSClassFromString(@"UIStatusBar_Modern");
-			for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
-				if (![scene isKindOfClass:UIWindowScene.class]) continue;
-				for (UIWindow *window in ((UIWindowScene *)scene).windows) {
-					if (statusBarClass != Nil && [window isKindOfClass:statusBarClass]) {
-						UILabel *label = (UILabel *)[window viewWithTag:kNetSpeedLabelTag];
-						if (label != nil) label.text = text;
-					}
-				}
-			}
+			gNetSpeedLabel.text = text;
 		});
 	});
 	dispatch_resume(gSampleTimer);
@@ -125,7 +118,36 @@ static void NetSpeedStartSampling(void) {
 @interface UIStatusBar_Modern : UIWindow
 @end
 
+@interface UIStatusBarWindow : UIWindow
+@end
+
+@interface _UIStatusBarForegroundView : UIView
+@end
+
 %hook UIStatusBar_Modern
+
+- (void)layoutSubviews {
+	%orig;
+	NetSpeedAttachToStatusBar(self);
+}
+
+%end
+
+%hook UIStatusBarWindow
+
+- (void)setStatusBar:(id)statusBar {
+	%orig;
+	NetSpeedAttachToStatusBar((UIView *)statusBar);
+}
+
+- (void)layoutSubviews {
+	%orig;
+	NetSpeedAttachToStatusBar(self);
+}
+
+%end
+
+%hook _UIStatusBarForegroundView
 
 - (void)layoutSubviews {
 	%orig;
