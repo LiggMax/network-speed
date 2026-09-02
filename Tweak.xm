@@ -45,16 +45,30 @@ static NSString *NetSpeedFormat(double bytesPerSecond) {
 	return [NSString stringWithFormat:@"%.0fB/s", bytesPerSecond];
 }
 
-static UIView *NetSpeedFindDisplayableContainer(UIView *root) {
+static UIView *NetSpeedFindRightmostDisplayableContainer(UIView *root, UIView *coordinateView) {
+	UIView *best = nil;
+	CGFloat bestMaxX = -CGFLOAT_MAX;
 	for (NSString *className in @[@"STUIStatusBarDisplayableContainerView", @"UIStatusBarDisplayableContainerView", @"_UIStatusBarDisplayableContainerView"]) {
 		Class containerClass = NSClassFromString(className);
-		if (containerClass != Nil && [root isKindOfClass:containerClass]) return root;
+		if (containerClass != Nil && [root isKindOfClass:containerClass] && root.bounds.size.width > 0.0) {
+			CGRect frameInCoordinateView = [root.superview convertRect:root.frame toView:coordinateView];
+			if (CGRectGetMaxX(frameInCoordinateView) > bestMaxX) {
+				best = root;
+				bestMaxX = CGRectGetMaxX(frameInCoordinateView);
+			}
+		}
 	}
 	for (UIView *subview in root.subviews) {
-		UIView *result = NetSpeedFindDisplayableContainer(subview);
-		if (result != nil) return result;
+		UIView *result = NetSpeedFindRightmostDisplayableContainer(subview, coordinateView);
+		if (result != nil) {
+			CGRect frameInCoordinateView = [result.superview convertRect:result.frame toView:coordinateView];
+			if (CGRectGetMaxX(frameInCoordinateView) > bestMaxX) {
+				best = result;
+				bestMaxX = CGRectGetMaxX(frameInCoordinateView);
+			}
+		}
 	}
-	return nil;
+	return best;
 }
 
 static void NetSpeedLayoutLabel(UIView *container, UILabel *label) {
@@ -80,7 +94,7 @@ static void NetSpeedLayoutLabel(UIView *container, UILabel *label) {
 }
 
 static void NetSpeedAttachLabel(UIView *statusBar) {
-	UIView *container = NetSpeedFindDisplayableContainer(statusBar);
+	UIView *container = NetSpeedFindRightmostDisplayableContainer(statusBar, statusBar);
 	if (container == nil) container = statusBar;
 	if (container == nil || container.bounds.size.width <= 0.0 || container.bounds.size.height <= 0.0) return;
 	UILabel *label = (UILabel *)[container viewWithTag:0x4E535053];
