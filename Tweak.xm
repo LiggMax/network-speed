@@ -170,13 +170,12 @@ static void NetSpeedLogRuntimeState(void) {
 	if (gDidLogRuntime) return;
 	gDidLogRuntime = YES;
 	NetSpeedLog(@"runtime: pid=%d UIStatusBar_Modern=%@ UIStatusBarWindow=%@ _UIStatusBar=%@ UIStatusBar_Base=%@ _UIStatusBarForegroundView=%@", getpid(), NSClassFromString(@"UIStatusBar_Modern") ? @"YES" : @"NO", NSClassFromString(@"UIStatusBarWindow") ? @"YES" : @"NO", NSClassFromString(@"_UIStatusBar") ? @"YES" : @"NO", NSClassFromString(@"UIStatusBar_Base") ? @"YES" : @"NO", NSClassFromString(@"_UIStatusBarForegroundView") ? @"YES" : @"NO");
-	for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
-		if (![scene isKindOfClass:UIWindowScene.class]) continue;
-		UIWindowScene *windowScene = (UIWindowScene *)scene;
-		NetSpeedLog(@"scene: class=%@ state=%ld orientation=%ld windows=%lu", NSStringFromClass(scene.class), (long)scene.activationState, (long)windowScene.interfaceOrientation, (unsigned long)windowScene.windows.count);
-		for (UIWindow *window in windowScene.windows) {
-			NetSpeedLog(@"window: class=%@ level=%.1f hidden=%@ bounds=%@ root=%@", NSStringFromClass(window.class), window.windowLevel, window.hidden ? @"YES" : @"NO", NSStringFromCGRect(window.bounds), NSStringFromClass(window.rootViewController.class));
-		}
+	// SpringBoard on iPadOS 18 can keep its system windows outside the scene
+	// collection, so use KVC for UIApplication's private window list here.
+	id windows = [UIApplication.sharedApplication valueForKey:@"windows"];
+	NetSpeedLog(@"application windows=%@ count=%lu", NSStringFromClass([windows class]), (unsigned long)[windows count]);
+	for (UIWindow *window in windows) {
+		NetSpeedLog(@"window: class=%@ level=%.1f hidden=%@ bounds=%@ root=%@ subviews=%lu", NSStringFromClass(window.class), window.windowLevel, window.hidden ? @"YES" : @"NO", NSStringFromCGRect(window.bounds), NSStringFromClass(window.rootViewController.class), (unsigned long)window.subviews.count);
 	}
 }
 
