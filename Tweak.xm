@@ -170,6 +170,9 @@ static void NetSpeedStartSampling(void) {
 @interface UIStatusBarWindow : UIWindow
 @end
 
+@interface SBStatusBarWindow : UIWindow
+@end
+
 @interface _UIStatusBarForegroundView : UIView
 @end
 
@@ -204,6 +207,21 @@ static void NetSpeedStartSampling(void) {
 	%orig;
 	NetSpeedLogRuntimeState();
 	NetSpeedAttachToStatusBar(self);
+}
+
+%end
+
+%hook SBStatusBarWindow
+
+- (void)layoutSubviews {
+	%orig;
+	NetSpeedLogRuntimeState();
+	NetSpeedAttachToStatusBar(self);
+	// iPadOS creates the status-bar content asynchronously after the window
+	// itself has laid out, so retry once after the current layout transaction.
+	dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+		NetSpeedAttachToStatusBar(self);
+	});
 }
 
 %end

@@ -49,6 +49,7 @@ jobs:
           grep -q '%hook SpringBoard' Tweak.xm
           grep -q '%hook UIStatusBar_Modern' Tweak.xm
           grep -q '%hook UIStatusBarWindow' Tweak.xm
+          grep -q '%hook SBStatusBarWindow' Tweak.xm
           grep -q '%hook _UIStatusBarForegroundView' Tweak.xm
           grep -q 'getifaddrs' Tweak.xm
           grep -q 'THEOS_PACKAGE_SCHEME=rootless' README.md
