@@ -4,13 +4,38 @@
 #import <net/if_var.h>
 #import <dispatch/dispatch.h>
 #import <math.h>
+#import <stdarg.h>
+#import <unistd.h>
 
 static const NSInteger kNetSpeedLabelTag = 0x4E535053;
+static NSObject *gLogLock;
+static BOOL gDidLogRuntime;
+static BOOL gDidLogAttach;
+static BOOL gDidLogMissingForeground;
 static __weak UILabel *gNetSpeedLabel;
 static dispatch_source_t gSampleTimer;
 static dispatch_queue_t gSampleQueue;
 static uint64_t gPreviousReceived, gPreviousSent, gPreviousTimestamp;
 static double gSmoothedDownload, gSmoothedUpload;
+
+static void NetSpeedLog(NSString *format, ...) {
+	va_list arguments;
+	va_start(arguments, format);
+	NSString *message = [[NSString alloc] initWithFormat:format arguments:arguments];
+	va_end(arguments);
+	NSString *line = [NSString stringWithFormat:@"[%@] %@\n", [NSDate date], message];
+	@synchronized (gLogLock) {
+		NSString *path = @"/var/mobile/NetSpeedStatus.log";
+		NSFileHandle *handle = [NSFileHandle fileHandleForWritingAtPath:path];
+		if (handle == nil) {
+			[line writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:nil];
+		} else {
+			[handle seekToEndOfFile];
+			[handle writeData:[line dataUsingEncoding:NSUTF8StringEncoding]];
+			[handle closeFile];
+		}
+	}
+}
 
 static uint64_t NetSpeedNow(void) {
 	return (uint64_t)([[NSDate date] timeIntervalSince1970] * 1000000000.0);
@@ -68,7 +93,13 @@ static void NetSpeedAttachToStatusBar(UIView *statusBar) {
 	UIView *container = NetSpeedFindForegroundView(statusBar);
 	// Some iPadOS builds do not expose the foreground container with the same
 	// private class name. The native status-bar window is the safe fallback.
-	if (container == nil) container = statusBar;
+	if (container == nil) {
+		if (!gDidLogMissingForeground) {
+			NetSpeedLog(@"foreground view not found; statusBar=%@ bounds=%@ subviews=%lu", NSStringFromClass(statusBar.class), NSStringFromCGRect(statusBar.bounds), (unsigned long)statusBar.subviews.count);
+			gDidLogMissingForeground = YES;
+		}
+		return;
+	}
 	UILabel *label = (UILabel *)[container viewWithTag:kNetSpeedLabelTag];
 	if (label == nil) {
 		label = [[UILabel alloc] initWithFrame:CGRectZero];
@@ -87,6 +118,24 @@ static void NetSpeedAttachToStatusBar(UIView *statusBar) {
 	gNetSpeedLabel = label;
 	[container bringSubviewToFront:label];
 	NetSpeedLayoutLabel(container, label);
+	if (!gDidLogAttach) {
+		NetSpeedLog(@"attached label: statusBar=%@ container=%@ bounds=%@ labelFrame=%@", NSStringFromClass(statusBar.class), NSStringFromClass(container.class), NSStringFromCGRect(container.bounds), NSStringFromCGRect(label.frame));
+		gDidLogAttach = YES;
+	}
+}
+
+static void NetSpeedLogRuntimeState(void) {
+	if (gDidLogRuntime) return;
+	gDidLogRuntime = YES;
+	NetSpeedLog(@"runtime: pid=%d UIStatusBar_Modern=%@ UIStatusBarWindow=%@ _UIStatusBar=%@ UIStatusBar_Base=%@ _UIStatusBarForegroundView=%@", getpid(), NSClassFromString(@"UIStatusBar_Modern") ? @"YES" : @"NO", NSClassFromString(@"UIStatusBarWindow") ? @"YES" : @"NO", NSClassFromString(@"_UIStatusBar") ? @"YES" : @"NO", NSClassFromString(@"UIStatusBar_Base") ? @"YES" : @"NO", NSClassFromString(@"_UIStatusBarForegroundView") ? @"YES" : @"NO");
+	for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+		if (![scene isKindOfClass:UIWindowScene.class]) continue;
+		UIWindowScene *windowScene = (UIWindowScene *)scene;
+		NetSpeedLog(@"scene: class=%@ state=%ld orientation=%ld windows=%lu", NSStringFromClass(scene.class), (long)scene.activationState, (long)windowScene.interfaceOrientation, (unsigned long)windowScene.windows.count);
+		for (UIWindow *window in windowScene.windows) {
+			NetSpeedLog(@"window: class=%@ level=%.1f hidden=%@ bounds=%@ root=%@", NSStringFromClass(window.class), window.windowLevel, window.hidden ? @"YES" : @"NO", NSStringFromCGRect(window.bounds), NSStringFromClass(window.rootViewController.class));
+		}
+	}
 }
 
 static void NetSpeedStartSampling(void) {
@@ -124,10 +173,20 @@ static void NetSpeedStartSampling(void) {
 @interface _UIStatusBarForegroundView : UIView
 @end
 
+@interface _UIStatusBar : UIView
+@end
+
+@interface UIStatusBar_Base : UIView
+@end
+
+@interface UIWindow (NetSpeedStatusBarHook)
+@end
+
 %hook UIStatusBar_Modern
 
 - (void)layoutSubviews {
 	%orig;
+	NetSpeedLogRuntimeState();
 	NetSpeedAttachToStatusBar(self);
 }
 
@@ -137,11 +196,13 @@ static void NetSpeedStartSampling(void) {
 
 - (void)setStatusBar:(id)statusBar {
 	%orig;
+	NetSpeedLog(@"UIStatusBarWindow setStatusBar: %@", NSStringFromClass([statusBar class]));
 	NetSpeedAttachToStatusBar((UIView *)statusBar);
 }
 
 - (void)layoutSubviews {
 	%orig;
+	NetSpeedLogRuntimeState();
 	NetSpeedAttachToStatusBar(self);
 }
 
@@ -156,11 +217,49 @@ static void NetSpeedStartSampling(void) {
 
 %end
 
+%hook _UIStatusBar
+
+- (void)layoutSubviews {
+	%orig;
+	NetSpeedAttachToStatusBar(self);
+}
+
+%end
+
+%hook UIStatusBar_Base
+
+- (void)layoutSubviews {
+	%orig;
+	NetSpeedAttachToStatusBar(self);
+}
+
+%end
+
+// iPadOS 18 may use a private UIWindow subclass whose concrete name differs
+// between builds. Discover it through the common UIWindow layout path.
+%hook UIWindow
+
+- (void)layoutSubviews {
+	%orig;
+	NSString *className = NSStringFromClass(self.class);
+	if ([className rangeOfString:@"StatusBar" options:NSCaseInsensitiveSearch].location != NSNotFound) {
+		NetSpeedAttachToStatusBar(self);
+	}
+}
+
+%end
+
 %hook SpringBoard
 
 - (void)applicationDidFinishLaunching:(UIApplication *)application {
 	%orig;
+	NetSpeedLog(@"SpringBoard launched; bundle=%@", NSBundle.mainBundle.bundleIdentifier);
 	NetSpeedStartSampling();
 }
 
 %end
+
+%ctor {
+	gLogLock = [NSObject new];
+	NetSpeedLog(@"loaded; bundle=%@", NSBundle.mainBundle.bundleIdentifier);
+}
