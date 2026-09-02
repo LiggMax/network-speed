@@ -6,13 +6,6 @@
 
 由于使用 iOS 私有状态栏类，其他 iOS/iPadOS 版本需要单独验证。
 
-## 诊断日志
-
-插件会将运行时诊断写入 `/var/mobile/NetSpeedStatus.log`，可通过 SSH 查看：
-
-```sh
-tail -200 /var/mobile/NetSpeedStatus.log
-```
 
 ## 构建
 
